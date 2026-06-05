@@ -74,6 +74,20 @@ def fit_for_display(image: np.ndarray, max_width: int, max_height: int) -> np.nd
     return cv2.resize(image, new_size, interpolation=cv2.INTER_AREA)
 
 
+def resize_for_inference(frame_bgr: np.ndarray, max_side: Optional[int]) -> np.ndarray:
+    if max_side is None or max_side <= 0:
+        return frame_bgr
+
+    height, width = frame_bgr.shape[:2]
+    longest = max(height, width)
+    if longest <= max_side:
+        return frame_bgr
+
+    scale = float(max_side) / float(longest)
+    new_size = (max(1, int(width * scale)), max(1, int(height * scale)))
+    return cv2.resize(frame_bgr, new_size, interpolation=cv2.INTER_AREA)
+
+
 def combine_views(original_bgr: np.ndarray, result_bgr: np.ndarray) -> np.ndarray:
     if original_bgr.shape[:2] != result_bgr.shape[:2]:
         result_bgr = cv2.resize(
@@ -143,13 +157,14 @@ class YolactInferenceBackend:
         self.net = net.to(self.device)
         self.net.detect.use_fast_nms = True
 
-    def _get_color(self, color_idx: int, bgr: bool) -> Tuple[int, int, int]:
+    def _get_color(self, class_id: int, fallback_idx: int, bgr: bool) -> Tuple[int, int, int]:
+        color_idx = (class_id * 5 if class_id >= 0 else fallback_idx * 5) % len(COLORS)
         cache_key = (color_idx, bgr)
         cached = self.color_cache.get(cache_key)
         if cached is not None:
             return cached
 
-        color = COLORS[color_idx % len(COLORS)]
+        color = COLORS[color_idx]
         if bgr:
             color = (int(color[2]), int(color[1]), int(color[0]))
         else:
@@ -157,8 +172,13 @@ class YolactInferenceBackend:
         self.color_cache[cache_key] = color
         return color
 
-    def predict(self, frame_bgr: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        frame_tensor = torch.from_numpy(frame_bgr).to(self.device).float()
+    def predict(
+        self,
+        frame_bgr: np.ndarray,
+        inference_max_side: Optional[int] = None,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        working_frame = resize_for_inference(frame_bgr, inference_max_side)
+        frame_tensor = torch.from_numpy(working_frame).to(self.device).float()
         batch = self.transform(frame_tensor.unsqueeze(0))
         extras = {
             "backbone": "full",
@@ -170,10 +190,10 @@ class YolactInferenceBackend:
         result_bgr = self._draw_predictions(
             preds,
             frame_tensor,
-            frame_bgr.shape[0],
-            frame_bgr.shape[1],
+            working_frame.shape[0],
+            working_frame.shape[1],
         )
-        combined = combine_views(frame_bgr, result_bgr)
+        combined = combine_views(working_frame, result_bgr)
         return result_bgr, combined
 
     def process_image_file(self, image_path: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -267,7 +287,8 @@ class YolactInferenceBackend:
         if masks is not None:
             for idx in range(count):
                 mask = masks[idx].detach().cpu().numpy()
-                color = np.array(self._get_color(idx * 5, bgr=True), dtype=np.float32)
+                class_id = int(classes[idx])
+                color = np.array(self._get_color(class_id, idx, bgr=True), dtype=np.float32)
                 colored = np.zeros_like(output, dtype=np.float32)
                 colored[:, :] = color
                 mask_3c = mask[:, :, None].astype(np.float32)
@@ -278,7 +299,8 @@ class YolactInferenceBackend:
 
         for idx in range(count):
             x1, y1, x2, y2 = boxes[idx, :].astype(int)
-            color = self._get_color(idx * 5, bgr=True)
+            class_id = int(classes[idx])
+            color = self._get_color(class_id, idx, bgr=True)
             cv2.rectangle(output, (x1, y1), (x2, y2), color, 2)
 
             class_name = cfg.dataset.class_names[int(classes[idx])]
