@@ -1,293 +1,235 @@
-# YolactEdge 中文 README
+# yolactedge-algorithm-project
 
-## 项目简介
+这是一个基于 `YOLACT Edge` 的实例分割工作区，当前主要面向 Windows 本地推理、结果可视化和图片/视频导出。
 
-YolactEdge 是一个面向边缘设备的实时实例分割项目，基于 YOLACT 改进，支持：
+仓库目前包含三部分：
 
-- 单张图片实例分割
-- 视频实例分割
-- 摄像头实时推理
-- COCO / YouTube VIS 相关训练与评估
+- `cocoapi/`
+  `pycocotools` 源码依赖
+- `yolact_edge/`
+  `YOLACT Edge` 主项目源码、配置、权重、原始推理脚本
+- `terminal/`
+  新增的本地可视化工具，包括终端版和桌面 GUI
 
-本仓库原始说明偏向 Linux / Jetson 环境。本文档面向 Windows 用户，重点说明如何在 Windows 上快速把项目跑起来。
+如果你的目标是：
 
-## 适合谁看
+- 选择一张图片做实例分割
+- 界面同时显示原图和分割结果
+- 选择视频并预览处理效果
+- 一键导出处理后图片或视频
 
-如果你符合以下任一情况，这份文档更适合你：
+优先使用 `terminal/gui_app.py`，不建议再直接手敲长命令。
 
-- 第一次在 Windows 上配置 `yolact_edge`
-- 想快速完成图片推理
-- Google Drive 打不开，不知道该下载哪个模型
-- 在 `pycocotools`、`cython_nms`、`cl`、`torch` 版本上遇到报错
+**目录结构**
+```text
+D:\All Program\yolactedge-algorithm-project
+├─ .gitignore
+├─ README.md
+├─ cocoapi
+│  ├─ common
+│  ├─ PythonAPI
+│  └─ ...
+├─ yolact_edge
+│  ├─ eval.py
+│  ├─ INSTALL.md
+│  ├─ README.md
+│  ├─ README_CN.md
+│  ├─ setup.py
+│  ├─ weights
+│  ├─ results
+│  ├─ photo
+│  └─ yolact_edge
+│     ├─ data
+│     ├─ layers
+│     ├─ utils
+│     ├─ inference.py
+│     └─ yolact.py
+└─ terminal
+   ├─ inference_backend.py
+   ├─ gui_app.py
+   ├─ run_gui.bat
+   ├─ visual_terminal.py
+   └─ outputs
+```
 
-更详细的踩坑与排障请看 [配置说明.md](./配置说明.md)。
+**关键目录说明**
 
-## 当前推荐的 Windows 配置
+- `yolact_edge/weights/`
+  模型权重目录。当前仓库里已经有 `yolact_edge_54_800000.pth`，可直接作为默认推理模型。
 
-建议使用以下组合：
+- `terminal/inference_backend.py`
+  可复用的推理后端。终端版和 GUI 都复用这套逻辑。
 
+- `terminal/gui_app.py`
+  本地桌面 GUI。支持选图、选视频、预览、导出。
+
+- `terminal/run_gui.bat`
+  GUI 一键启动脚本。优先用这个启动。
+
+- `terminal/visual_terminal.py`
+  终端版交互工具。适合调试或简化场景，不是主要入口。
+
+**推荐环境**
+
+- Windows
 - Python `3.8`
 - PyTorch `1.8.1+cu111`
 - TorchVision `0.9.1+cu111`
-- Visual Studio 2022 C++ 编译工具
-- CUDA GPU
+- NVIDIA CUDA GPU
 
-不建议直接使用：
+如果只是先把功能跑通，建议关闭 TensorRT。
 
-- Python `3.14`
-- PyTorch `1.6.0+cu101` 搭配 RTX 30 系显卡
+**安装顺序**
 
-## 一、快速开始
+1. 创建虚拟环境
+```powershell
+cd "D:\All Program\yolactedge-algorithm-project"
+python -m venv .venv38
+```
 
-### 1. 创建虚拟环境
+2. 安装 PyTorch
+```powershell
+.\.venv38\Scripts\python.exe -m pip install torch==1.8.1+cu111 torchvision==0.9.1+cu111 -f https://download.pytorch.org/whl/torch_stable.html
+```
 
-如果你使用 Miniconda，并且系统没有 `py` 启动器，可直接这样创建：
+3. 安装基础依赖
+```powershell
+.\.venv38\Scripts\python.exe -m pip install --upgrade pip setuptools wheel
+.\.venv38\Scripts\python.exe -m pip install cython numpy opencv-python pillow matplotlib GitPython termcolor tensorboard colorama
+```
+
+4. 安装 `pycocotools`
+```powershell
+cd "D:\All Program\yolactedge-algorithm-project\cocoapi\PythonAPI"
+..\..\.venv38\Scripts\python.exe -m pip install .
+```
+
+5. 安装 `yolact_edge`
+```powershell
+cd "D:\All Program\yolactedge-algorithm-project\yolact_edge"
+..\.venv38\Scripts\python.exe -m pip install .
+```
+
+更详细的安装文档见 [INSTALL.md](/D:/All%20Program/yolactedge-algorithm-project/yolact_edge/INSTALL.md:1)。
+
+**GUI 启动方式**
+
+最简单的方式：
 
 ```powershell
-C:\Users\你的用户名\miniconda3\python.exe -m venv .venv38
+cd "D:\All Program\yolactedge-algorithm-project\terminal"
+.\run_gui.bat
 ```
 
-验证：
+也可以直接用 Python：
 
 ```powershell
-.\.venv38\Scripts\python.exe -V
+cd "D:\All Program\yolactedge-algorithm-project"
+& "D:\All Program\yolactedge-algorithm-project\yolact_edge\.venv38\Scripts\python.exe" terminal\gui_app.py
 ```
 
-### 2. 加载 VS 编译环境
+**GUI 功能**
 
-本项目在 Windows 下需要编译扩展，所以必须保证 `cl` 可用。
+当前 GUI 支持：
 
-示例：
+- `Load Model`
+  加载权重
+
+- `Open Image`
+  选择图片并显示原图和实例分割结果
+
+- `Save Image`
+  导出当前处理结果
+
+- `Open Video`
+  选择视频文件
+
+- `Play Video`
+  实时播放并做逐帧实例分割
+
+- `Stop Video`
+  停止播放
+
+- `Export Video`
+  一键导出处理后的视频
+
+界面参数：
+
+- `Weights`
+  模型权重路径
+
+- `Score`
+  置信度阈值
+
+- `Disable TensorRT`
+  Windows 下建议默认勾选
+
+- `Export side-by-side`
+  导出时保存“原图 + 分割图”拼接结果；不勾选则只导出分割结果
+
+**终端版启动方式**
+
+如果你还想用终端版：
+
+图片模式：
 
 ```powershell
-& "E:\visual studio\Microsoft Visual Studio\18\Community\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64
-cl
+cd "D:\All Program\yolactedge-algorithm-project"
+& "D:\All Program\yolactedge-algorithm-project\yolact_edge\.venv38\Scripts\python.exe" terminal\visual_terminal.py --mode image --input yolact_edge\test.jpg --disable-tensorrt
 ```
 
-如果 `cl` 能输出版本信息，说明编译环境已加载成功。
-
-### 3. 安装 PyTorch
-
-推荐：
+视频模式：
 
 ```powershell
-& "D:\All Program\yolact_edge\.venv38\Scripts\python.exe" -m pip install torch==1.8.1+cu111 torchvision==0.9.1+cu111 -f https://download.pytorch.org/whl/torch_stable.html
+cd "D:\All Program\yolactedge-algorithm-project"
+& "D:\All Program\yolactedge-algorithm-project\yolact_edge\.venv38\Scripts\python.exe" terminal\visual_terminal.py --mode video --input your_video.mp4 --disable-tensorrt --output terminal\outputs\result.mp4
 ```
 
-验证：
+**原项目原生命令**
+
+原始命令行入口仍然在 [yolact_edge/eval.py](/D:/All%20Program/yolactedge-algorithm-project/yolact_edge/eval.py:1)。
+
+例如：
 
 ```powershell
-& "D:\All Program\yolact_edge\.venv38\Scripts\python.exe" -c "import torch, torchvision; print(torch.__version__); print(torchvision.__version__); print(torch.cuda.is_available())"
+cd "D:\All Program\yolactedge-algorithm-project\yolact_edge"
+..\.venv38\Scripts\python.exe eval.py --disable_tensorrt --trained_model=weights\yolact_edge_54_800000.pth --score_threshold=0.3 --image=test.jpg
 ```
 
-### 4. 安装其他依赖
+但这个入口更适合原始调试，不适合日常可视化操作。
 
-```powershell
-& "D:\All Program\yolact_edge\.venv38\Scripts\python.exe" -m pip install --upgrade pip setuptools wheel
-& "D:\All Program\yolact_edge\.venv38\Scripts\python.exe" -m pip install cython numpy opencv-python pillow matplotlib GitPython termcolor tensorboard colorama
-```
+**setup.py 是否有用**
 
-### 5. 安装 pycocotools（含 YTVOS）
+有用，建议保留。
 
-本项目依赖的 `pycocotools` 推荐使用 `haotian-liu/cocoapi` fork，并在 Windows 下手动去掉 GCC 编译参数后再安装。
+[yolact_edge/setup.py](/D:/All%20Program/yolactedge-algorithm-project/yolact_edge/setup.py:1) 负责：
 
-详细步骤见 [配置说明.md](./配置说明.md)。
+- 支持 `pip install .`
+- 编译 `cython_nms` 扩展
 
-安装成功后可验证：
+删掉它会直接影响安装和后续二次开发。
 
-```powershell
-& "D:\All Program\yolact_edge\.venv38\Scripts\python.exe" -c "from pycocotools.coco import COCO; print('COCO ok')"
-& "D:\All Program\yolact_edge\.venv38\Scripts\python.exe" -c "from pycocotools.ytvos import YTVOS; print('YTVOS ok')"
-```
+**当前清理和忽略规则**
 
-### 6. 安装项目
+- 根目录 `.gitignore` 已补充
+- 已忽略虚拟环境、编译产物、`weights/`、结果目录和本地大数据目录
+- `terminal/outputs/` 会被自动忽略
 
-```powershell
-& "D:\All Program\yolact_edge\.venv38\Scripts\python.exe" -m pip install .
-```
+**已验证**
 
-验证：
+当前新增内容已做这些检查：
 
-```powershell
-& "D:\All Program\yolact_edge\.venv38\Scripts\python.exe" -c "import yolact_edge; print('yolact_edge ok')"
-```
+- `terminal/inference_backend.py` 语法检查通过
+- `terminal/visual_terminal.py` 语法检查通过
+- `terminal/gui_app.py` 语法检查通过
+- 当前 `.venv38` 中 `tkinter` 可用
+- 当前 `.venv38` 中 `Pillow` 可用
 
-## 二、模型下载
+**注意**
 
-### 1. 推荐首次使用的模型
+如果你双击 GUI 后无法推理，优先检查：
 
-如果你只想先把图片推理跑通，推荐先下载以下 COCO 模型：
-
-- `yolact_edge_54_800000.pth`
-- 或 `yolact_edge_resnet50_54_800000.pth`
-
-其中：
-
-- `yolact_edge_54_800000.pth` 对应 `yolact_edge_config`
-- `yolact_edge_resnet50_54_800000.pth` 对应 `yolact_edge_resnet50_config`
-
-### 2. 下载来源
-
-优先参考项目 README 的 `OneDrive mirror`，如果 Google Drive 打不开就直接用镜像。
-
-官方 README：
-
-- https://github.com/WisconsinAIVision/yolact_edge
-
-下载后放到：
-
-```text
-weights\
-```
-
-## 三、首次推理
-
-### 1. 单图推理
-
-推荐先禁用 TensorRT：
-
-```powershell
-& "D:\All Program\yolact_edge\.venv38\Scripts\python.exe" eval.py --disable_tensorrt --trained_model=weights\yolact_edge_54_800000.pth --score_threshold=0.3 --image=test.jpg
-```
-
-如果使用 `resnet50` 权重：
-
-```powershell
-& "D:\All Program\yolact_edge\.venv38\Scripts\python.exe" eval.py --disable_tensorrt --trained_model=weights\yolact_edge_resnet50_54_800000.pth --score_threshold=0.3 --image=test.jpg
-```
-
-### 2. 保存输出图片
-
-示例：
-
-```powershell
-& "D:\All Program\yolact_edge\.venv38\Scripts\python.exe" eval.py --disable_tensorrt --trained_model=weights\yolact_edge_54_800000.pth --score_threshold=0.3 --image=input.jpg:output.jpg
-```
-
-注意：
-
-Windows 下不要把 `C:\...:D:\...` 这种绝对路径直接传给 `--image`，因为程序内部用 `:` 分隔输入输出，和盘符冲突。
-
-推荐做法：
-
-- 把图片放在项目目录中
-- 使用相对路径
-
-### 3. 视频推理
-
-```powershell
-& "D:\All Program\yolact_edge\.venv38\Scripts\python.exe" eval.py --disable_tensorrt --trained_model=weights\yolact_edge_54_800000.pth --score_threshold=0.3 --video=my_video.mp4
-```
-
-### 4. 摄像头推理
-
-```powershell
-& "D:\All Program\yolact_edge\.venv38\Scripts\python.exe" eval.py --disable_tensorrt --trained_model=weights\yolact_edge_54_800000.pth --score_threshold=0.3 --video=0
-```
-
-## 四、为什么推荐先关闭 TensorRT
-
-官方项目的 TensorRT 配置更偏：
-
-- Linux
-- Jetson
-- TensorRT 7.x
-- torch2trt
-
-Windows 下首次部署时，建议先把目标定为：
-
-- 能加载模型
-- 能成功跑一张图
-- 能输出分割结果
-
-确认这些都没问题后，再考虑 TensorRT 优化。
-
-因此本文档中的所有首次示例都使用：
-
-```powershell
---disable_tensorrt
-```
-
-## 五、常见问题
-
-### 1. `No suitable Python runtime found`
-
-说明没有 `py` 启动器或没有注册 `Python 3.8`。  
-直接使用 Miniconda Python 创建 `venv` 即可。
-
-### 2. pip 安装时报 SSL 或 HTTPS 错误
-
-常见原因：
-
-- VPN
-- 代理
-- 安全软件拦截 HTTPS
-
-建议：
-
-- 关闭 VPN 后重试
-- 改用 `pypi.org`
-- 或切换镜像源
-
-### 3. `cl` 无法识别
-
-说明 Visual Studio 编译环境没有加载到当前 shell。  
-需要先执行 `Launch-VsDevShell.ps1`，或使用 VS 自带的开发终端。
-
-### 4. `pycocotools` 编译时报 `/Wno-cpp`
-
-这是因为 `setup.py` 里存在 GCC 专用参数，Windows 下要手动删掉。  
-详见 [配置说明.md](./配置说明.md)。
-
-### 5. `numpy/arrayobject.h` 找不到
-
-这是本仓库 Windows 编译 `cython_nms` 的常见问题。  
-当前仓库里的 [setup.py](./setup.py) 已补上 `np.get_include()`。
-
-### 6. 模型加载后报显卡架构不兼容
-
-如果你使用的是 RTX 30 系显卡，不要继续用 `torch 1.6.0+cu101`。  
-改为：
-
-- `torch 1.8.1+cu111`
-- `torchvision 0.9.1+cu111`
-
-### 7. `test.jpg` 找不到
-
-说明你传给 `--image` 的文件不存在。  
-先确认文件路径正确，推荐使用项目目录下的相对路径。
-
-## 六、训练说明
-
-Windows 下训练不是不能做，但比单图推理复杂得多，主要包括：
-
-- 数据集组织
-- 预训练 backbone 权重
-- COCO / YouTube VIS 标注
-- 更严格的 CUDA 与依赖兼容性
-
-如果你的目标只是部署和推理，建议先不要直接进入训练阶段。
-
-训练相关原始说明请参考：
-
-- [README.md](./README.md)
-- [INSTALL.md](./INSTALL.md)
-
-## 七、建议的上手顺序
-
-建议按这个顺序操作：
-
-1. 配好 Python 3.8 和 VS C++ 编译环境
-2. 安装 `torch 1.8.1+cu111`
-3. 装好 `pycocotools`
-4. 执行 `pip install .`
-5. 下载 `weights\yolact_edge_54_800000.pth`
-6. 用 `--disable_tensorrt` 跑一张图
-7. 确认输出正常后，再尝试视频或训练
-
-## 八、相关文档
-
-- 原始英文 README: [README.md](./README.md)
-- 英文安装说明: [INSTALL.md](./INSTALL.md)
-- Windows 实战配置说明: [配置说明.md](./配置说明.md)
-
+- 权重路径是否存在
+- 是否已正确安装 `yolact_edge`
+- CUDA / PyTorch 是否可用
+- 是否保持 `Disable TensorRT` 勾选

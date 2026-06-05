@@ -8,7 +8,7 @@ from yolact_edge.data import cfg, mask_type
 import numpy as np
 
 import pyximport
-pyximport.install(setup_args={"include_dirs":np.get_include()}, reload_support=True)
+pyximport.install(setup_args={"include_dirs": np.get_include()}, reload_support=False)
 from yolact_edge.utils.cython_nms import nms as cnms
 
 
